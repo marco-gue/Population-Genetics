@@ -1,0 +1,21 @@
+---
+title: "Hardy-Weinberg Equilibrium"
+author: "Marco Guerra"
+format: html
+---
+
+## Data
+```{r}
+data <- read.table("BIO641.txt", header = TRUE, sep = "\t")
+```
+
+## Exact Test for HWE
+
+$$
+Pr(n_{AA}, n_{Aa}, n_{aa} \mid n_{A}, n_{a}) = \frac{n!}{n_{AA}!n_{Aa}!n_{aa}!} \cdot \frac{2^{n_{Aa}} n_{A}!n_{a}!}{(2n)!}
+$$
+
+```{r}
+
+```
+
