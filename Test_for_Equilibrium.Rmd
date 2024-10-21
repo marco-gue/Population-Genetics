@@ -1,0 +1,116 @@
+---
+title: "Test for Equilibrium"
+author: "Group 1: Gabriel B, Innocent, Marco, Thales"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load Data
+
+We loaded the data and identified which alleles are fixed.
+
+```{r}
+
+data <- read.table("BIO641.txt", header = TRUE, sep = "\t")
+
+constante <- c()
+for (i in 1:ncol(data)) {
+  if (length(unique(data[, i])) == 1) {
+    constante <- c(constante, i)
+  }
+}
+
+data_cleaned <- data[, -constante]
+```
+
+## Count
+
+We counted the homozygotes and heterozygotes for each marker in the filtered dataset.
+
+```{r}
+count_0 <- integer(ncol(data_cleaned))
+count_1 <- integer(ncol(data_cleaned))
+count_2 <- integer(ncol(data_cleaned))
+
+for (i in 1:ncol(data_cleaned)) {
+  count_0[i] <- sum(data_cleaned[, i] == 0)
+  count_1[i] <- sum(data_cleaned[, i] == 1)
+  count_2[i] <- sum(data_cleaned[, i] == 2)
+}
+
+result <- data.frame(
+  Column = colnames(data_cleaned),
+  Count_0 = as.numeric(count_0),
+  Count_1 = as.numeric(count_1),
+  Count_2 = as.numeric(count_2)
+)
+```
+
+## Chi-Square Test for Equilibrium
+
+We calculated the expected value based on theoretical equilibrium and then compared it with the observed values to compute the chi-square value.
+
+```{r}
+qui_values <- numeric(nrow(result))
+p_values <- numeric(nrow(result))
+
+for (i in 1:nrow(result)) {
+  q <- ((result[i, "Count_0"] + 0.5 * result[i, "Count_1"]) / 
+        (result[i, "Count_0"] + result[i, "Count_1"] + result[i, "Count_2"]))
+  p <- 1 - q
+  total <- result[i, "Count_0"] + result[i, "Count_1"] + result[i, "Count_2"]
+  
+  expectedAA <- (p^2) * total
+  expectedAa <- (2 * p * q) * total
+  expectedaa <- (q^2) * total
+  
+  qui <- (((result[i, "Count_2"] - expectedAA)^2 / expectedAA) + 
+          ((result[i, "Count_1"] - expectedAa)^2 / expectedAa) + 
+          ((result[i, "Count_0"] - expectedaa)^2 / expectedaa))
+  
+  qui_values[i] <- qui
+  
+  if (qchisq(0.95, df = 1) > qui_values[i]) {
+    p_values[i] <- "eq"
+  } else {
+    p_values[i] <- "neq"
+  }
+}
+```
+
+## Correction for Multiple Tests
+
+We applied the Bonferroni correction for multiple tests and evaluated whether the results still indicate equilibrium.
+
+```{r}
+astar <- 0.05 / nrow(result)
+f <- 1 - astar
+p_values_corrected <- character(nrow(result))
+
+for (i in 1:length(qui_values)) {
+  if (qchisq(f, df = 1) > qui_values[i]) {
+    p_values_corrected[i] <- "eq"
+  } else {
+    p_values_corrected[i] <- "neq"
+  }
+}
+```
+
+## Final Results
+
+The results are presented in a final table with the markers, equilibrium without correction, and after correction.
+
+```{r}
+dataframe <- data.frame(
+  Markers = result$Column,
+  Equilibrium = p_values,
+  `Equilibrium Corrected` = p_values_corrected
+)
+
+dataframe
+```
+
+

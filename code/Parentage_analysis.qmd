@@ -1,0 +1,183 @@
+---
+title: "Parentage analysis using heuristic methods"
+subtitle: "Population genetics - Prof. Kaio Olimpio"
+author: "Marco Guerra, Gabriel Blasques, Innocent Unzimai, Thales Pinto"
+date: "`r Sys.Date()`"
+format:
+  html:
+    embed-resources: true
+    toc: true
+    toc-location: left
+    number-sections: false
+    code-fold: true
+---
+
+```{css, echo = FALSE}
+.justify {
+  text-align: justify !important
+}
+```
+
+```{r, include=FALSE}
+library(tidyverse)
+library(kableExtra)
+```
+
+# HOT+HIPHOP
+**Homozygote Opposite Test (HOP)**
+
+**Homozygous Identical Parents, Heterozygous Offspring are Precluded (HIPHOP)**
+
+```{r, eval=FALSE}
+mygeno <- readRDS("geno_group1.rds")
+
+genopar <- mygeno[which(!grepl("DS", rownames(mygeno))),]; dim(genopar)
+genofam <- mygeno[which(grepl("DS", rownames(mygeno))),]; dim(genofam)
+
+result = list()
+for (i in rownames(genofam)) {
+  
+  off = i
+  mum = 'IA3023'
+  combs = expand.grid(mum, rownames(genopar)[-which(grepl("IA3023",rownames(genopar)))])
+  result[[i]] = do.call(rbind, apply(combs, 1, function(y){
+    
+    temp = data.frame(
+      off = as.matrix(genofam[which(rownames(genofam) == off),]), 
+      mum = genopar[which(rownames(genopar) == mum),], 
+      dad = genopar[which(rownames(genopar) == y[2]),]
+    )
+    
+    if(any(!temp$off %in% c(0, 1, 2) | !temp$mum %in% c(0, 1, 2) |
+           !temp$dad %in% c(0, 1, 2))){
+      temp = t(apply(temp, 1, function(x){
+        x[which(!x %in% c(0, 1, 2))] = NA
+        x
+      }))
+    }
+    
+    hot.dad = ifelse(temp[,'off'] == 2 & temp[,'dad'] == 0 |
+                       temp[,'off'] == 0 & temp[,'dad'] == 2, 1, 0)
+    hot.both = ifelse(
+      temp[,'off'] == 2 & (temp[,'mum'] == 0 | temp[,'dad'] == 0) |
+        temp[,'off']== 0 &
+        (temp[,'mum'] == 2 | temp[,'dad'] == 2),
+      1,
+      0
+    )
+    hiphop = ifelse((temp[,'off'] == 1 &
+                       temp[,'mum'] == 0 & temp[,'dad'] == 0) |
+                      (temp[,'off'] == 1 &
+                         temp[,'mum'] == 2 & temp[,'dad']== 2),
+                    1,
+                    0
+    )
+    score.both = hot.both + hiphop
+    data.frame(
+      off = off,
+      mum = mum,
+      dad = y[2],
+      score.dad = sum(hot.dad, na.rm = TRUE),
+      score.cross = sum(score.both, na.rm = TRUE)
+    )
+  }))
+}
+results <- do.call(rbind, result)
+top.scores <- results |> slice_min(order_by = score.dad, by = off)
+#table(top.scores$dad)
+#saveRDS(top.scores, "topscorehhh.rds")
+```
+
+```{r, echo=FALSE}
+tshhh <- readRDS("topscorehhh.rds")
+
+kbl(tshhh[1:4], row.names = FALSE) %>%
+  kable_paper() %>%
+  scroll_box(width = "600px", height = "200px")
+```
+
+# Correlation between markers
+
+```{r, eval=FALSE}
+combs = expand.grid(par = rownames(genopar), prog = rownames(genofam))
+
+temp = NULL
+for (i in 1:nrow(combs)) {
+  temp[i] = cor(genopar[combs[i,1],], genofam[combs[i,2],])
+}
+corr = cbind(combs, corr = temp)
+
+temp = as.matrix(corr |> pivot_wider(names_from = par, values_from = corr) |> 
+                   column_to_rownames('prog'))
+parname = colnames(temp)
+
+res.cor = list()
+for (i in rownames(temp)) {
+  
+  mum = 'IA3023'
+  dad = names(sort(temp[i,], TRUE))[1]
+  if(dad == mum) dad = names(sort(temp[i,], TRUE))[2]
+  
+  res.cor[[i]] = data.frame(
+    off = i,
+    mum = mum,
+    dad = dad,
+    corr.dad = temp[i, dad]
+  )
+  
+  rm(dad, mum, i)
+}
+res.cor = do.call(rbind, res.cor)
+#saveRDS(res.cor, "rescorr.rds")
+```
+
+
+```{r, echo=FALSE}
+rescorr <- readRDS("rescorr.rds")
+
+kbl(rescorr, row.names = FALSE) %>%
+  kable_paper() %>%
+  scroll_box(width = "600px", height = "200px")
+```
+
+# Coincidence
+:::{.justify}
+The percentage match between parents assigned by the *HOT+HIPHOP* method and the *Correlation* method was 63.13%.
+:::
+```{r}
+tab <- left_join(
+  select(tshhh[1:4], 1, 3),
+  select(rescorr, 1, 3),
+  by = "off") 
+tab <- tab |> mutate(cons = case_when(
+  dad.x == dad.y ~ 1,
+  dad.x != dad.y ~ 0
+))
+sum(tab$cons)/236
+```
+
+:::{.justify}
+The discrepancy was completely observed in the offspring of the LG03-3191 parent according to the *HOT+HIPHOP* method. However, according to the *Correlation* method, this group of individuals did not share the same parent, and interestingly, none of the proposed parents was LG03-3191.
+:::
+```{r}
+ggplot(tab, aes(x = dad.x, y = dad.y)) +
+  geom_tile(aes(fill = factor(cons)), color = "white") +
+  scale_fill_manual(values = c("0" = "#DC0000FF", "1" = "#3C5488FF")) +
+  labs(title = NULL,
+       x = "Dad - HOT+HIPHP",
+       y = "Dad - Correlation",
+       fill = "Match") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+# Discussion
+:::{.justify}
+* Although the HOT+HIPHOP method is very easy to apply because it is based on scores, it lacks robustness. The individual with the lowest score will be assigned as the true parent, even if the difference with the next lowest scoring individual is only one point.
+
+* The correlation method has the advantage of having values between -1 and +1, which facilitates its interpretation, we can reject suggested parents with negative or values close to zero and avoid false assignments, although it does not solve the problem mentioned in the previous point.
+
+* In both methods, the absence of a critical value increases the possibility of mistakenly assigning one of the possible parents as the true parent when it is not. This type of error is reduced with exact methods, such as those based on likelihood, because a critical value is available.
+:::
+
+
